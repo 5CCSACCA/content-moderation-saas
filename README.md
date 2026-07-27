@@ -1,4 +1,3 @@
-```markdown
 # Content Moderation SaaS
 
 A microservices-based SaaS that automatically screens user comments and messages
@@ -24,7 +23,7 @@ See `architecture.md` [or the report] for a full diagram and data flow.
 Each microservice lives in its own folder with an isolated Dockerfile and
 `requirements.txt`, so dependencies don't leak between services:
 
-```
+```markdown
 gateway/
   Dockerfile
   requirements.txt
@@ -166,7 +165,7 @@ Tests cover [unit tests per service + integration test through the gateway —
 fill in specifics once written].
 
 ## Environment Variables
-
+```
 | Variable | Used by | Purpose |
 |---|---|---|
 | `JWT_SECRET` | auth-service, gateway | Signing key for JWTs |
