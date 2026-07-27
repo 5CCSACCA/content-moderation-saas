@@ -1,6 +1,6 @@
 # Auth Service
 
-Handles user registration, login, JWT issuance, and role management.
+Handles user registration, login, JWT (JSON Web Token) issuance, and role management.
 
 ## Endpoints
 - `GET /health` — health check
