@@ -1,8 +1,14 @@
-# Content Moderation SaaS
+# Project summary
 
-A microservices-based SaaS that automatically screens user comments and messages
-for toxic, abusive, or harmful language using a fine-tuned DistilBERT model,
-routing flagged content to human moderators for review.
+**MediScreen** is a SaaS platform that turns a CNN-based skin lesion classifier into a clinical screening aid, deployable as a set of Dockerised microservices behind a single REST API.
+
+Clinicians upload dermatological images and receive a prediction (benign/malignant), a confidence score, and a Grad-CAM heatmap showing which region of the image drove the model's decision — supporting interpretability rather than a black-box output. Results below a defined confidence threshold are flagged as inconclusive rather than forced into a binary label, and every output is explicitly framed as a **screening aid, not a diagnostic result**.
+
+The system is built around four core services — authentication, case/results management, model inference, and an API gateway — coordinated via Docker Compose, with Prometheus and Grafana providing runtime monitoring (latency, confidence-score distribution, request volume). Role-based access control (Clinician, Admin, Auditor) is enforced at the API layer, with clinicians restricted to their own cases and a full audit log tracking every access to patient scan data, independent of who can view clinical content itself.
+
+Patient data is pseudonymised at the point of case creation (subject references only, no identifiable information stored), and the model was fine-tuned on the ISIC skin lesion dataset using transfer learning on a MobileNetV2/ResNet backbone, quantized for CPU-only inference.
+
+**Stack:** FastAPI · PyTorch (CPU) · PostgreSQL · Docker Compose · Prometheus · Grafana
 
 ## Architecture
 
@@ -24,32 +30,51 @@ Each microservice lives in its own folder with an isolated Dockerfile and
 `requirements.txt`, so dependencies don't leak between services:
 
 ```markdown
-gateway/
-  Dockerfile
-  requirements.txt
-  app/
-  README.md        <- service-level documentation
-auth-service/
-  Dockerfile
-  requirements.txt
-  app/
-  README.md
-inference-service/
-  Dockerfile
-  requirements.txt
-  app/
-  README.md
-submission-service/
-  ...
-moderation-service/
-  ...
-worker/
-  ...
-docker-compose.yml
-prometheus/
-  prometheus.yml
-grafana/
-  dashboards/
+disease-detection-saas/
+├── docker-compose.yml
+├── .env.example
+├── README.md
+│
+├── auth-service/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app/
+│       ├── main.py            # /register, /login, /token
+│       ├── models.py          # User, Role, Permission, RolePermission (SQLAlchemy)
+│       ├── security.py        # JWT encode/decode, password hashing
+│       └── db.py
+│
+├── inference-service/
+│   ├── Dockerfile
+│   ├── requirements.txt       # torch (cpu), torchvision, grad-cam, pillow
+│   └── app/
+│       ├── main.py            # /predict (internal only, service-account scoped)
+│       ├── model.py           # loads quantized CNN, runs inference
+│       ├── gradcam.py         # heatmap generation
+│       └── weights/           # model.pt downloaded at build/up time
+│
+├── cases-service/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app/
+│       ├── main.py            # /cases, /cases/{id}/scans — CRUD + RBAC
+│       ├── models.py          # Case, ScanResult, AuditLog
+│       ├── deps.py            # require_permission(), get_current_user()
+│       └── db.py
+│
+├── gateway/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app/
+│       └── main.py            # routes to auth/inference/cases, single public entrypoint
+│
+├── monitoring/
+│   ├── prometheus.yml
+│   └── grafana/
+│       └── dashboards/scan-metrics.json
+│
+└── shared/
+    └── schemas.py             # Pydantic models shared across services (avoid duplication)
 ```
 
 Each service's `README.md` documents its purpose, endpoints, and any
@@ -172,7 +197,6 @@ fill in specifics once written].
 | `DATABASE_URL` | auth-service, submission-service, moderation-service | Postgres connection string |
 | `REDIS_URL` | worker, submission-service | Celery broker connection |
 | [add more as needed] | | |
-
+```
 Safe local defaults are set in `docker-compose.yml` for coursework evaluation
 purposes; no manual secret configuration is required to deploy.
-```
