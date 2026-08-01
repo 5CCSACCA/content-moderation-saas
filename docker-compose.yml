@@ -1,0 +1,182 @@
+services:
+
+  # ---------------- Gateway ----------------
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - AUTH_SERVICE_URL=http://auth-service:8000
+      - SUBMISSION_SERVICE_URL=http://submission-service:8000
+      - MODERATION_SERVICE_URL=http://moderation-service:8000
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      submission-service:
+        condition: service_healthy
+      moderation-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+
+  # ---------------- Auth service ----------------
+  auth-service:
+    build: ./auth-service
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - DATABASE_URL=postgresql://admin:changeme@postgres:5432/moderation
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+
+  # ---------------- Inference service ----------------
+  inference-service:
+    build: ./inference-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s  # model loading takes longer than a typical service startup
+    networks:
+      - backend
+
+  # ---------------- Submission service ----------------
+  submission-service:
+    build: ./submission-service
+    environment:
+      - DATABASE_URL=postgresql://admin:changeme@postgres:5432/moderation
+      - INFERENCE_SERVICE_URL=http://inference-service:8000
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      inference-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+
+  # ---------------- Moderation service ----------------
+  moderation-service:
+    build: ./moderation-service
+    environment:
+      - DATABASE_URL=postgresql://admin:changeme@postgres:5432/moderation
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+
+  # ---------------- Worker (Celery) ----------------
+  worker:
+    build: ./worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - INFERENCE_SERVICE_URL=http://inference-service:8000
+      - DATABASE_URL=postgresql://admin:changeme@postgres:5432/moderation
+    depends_on:
+      redis:
+        condition: service_healthy
+      inference-service:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+
+  # ---------------- Postgres ----------------
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=moderation
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=changeme
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d moderation"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  # ---------------- Redis ----------------
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  # ---------------- Prometheus ----------------
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - gateway
+      - inference-service
+      - submission-service
+    networks:
+      - backend
+
+  # ---------------- Grafana ----------------
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  grafana-data:
