@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Environment variables
+.env
+
+# OS files
+.DS_Store
+
+# Model files (if large, consider Git LFS or excluding entirely)
+*.pt
+*.bin
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+.env
+.DS_Store
