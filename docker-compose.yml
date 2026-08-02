@@ -29,6 +29,8 @@ services:
   # ---------------- Auth service ----------------
   auth-service:
     build: ./auth-service
+    ports:
+    - "8001:8000"   # remove later once gateway routes to it
     environment:
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
       - DATABASE_URL=postgresql://admin:changeme@postgres:5432/moderation
