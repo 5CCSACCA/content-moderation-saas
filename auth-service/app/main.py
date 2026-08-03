@@ -11,6 +11,10 @@ from .security import create_access_token, decode_access_token, hash_password, v
 
 app = FastAPI(title="Auth Service", version="0.1.0")
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+Instrumentator().instrument(app).expose(app)
+
 # Create tables on startup if they don't already exist. For a coursework
 # project this keeps deployment to a single command; a production system
 # would use a proper migration tool (e.g. Alembic) instead.

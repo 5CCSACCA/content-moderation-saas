@@ -12,6 +12,10 @@ from .security import CurrentUser, get_current_user
 
 app = FastAPI(title="Submission Service", version="0.2.0")
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+Instrumentator().instrument(app).expose(app)
+
 Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")

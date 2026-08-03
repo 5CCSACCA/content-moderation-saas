@@ -15,6 +15,10 @@ from .security import CurrentUser, require_moderator
 
 app = FastAPI(title="Moderation Service", version="0.1.0")
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+Instrumentator().instrument(app).expose(app)
+
 # Only create moderation_actions here — submissions/predictions are owned
 # and created by submission-service; this service only reads them.
 ActionsBase.metadata.create_all(bind=engine)
