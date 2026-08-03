@@ -87,6 +87,8 @@ services:
   # ---------------- Moderation service ----------------
   moderation-service:
     build: ./moderation-service
+    ports:
+    - "8003:8000" # TEMP: for direct testing, remove before final submission
     environment:
       - DATABASE_URL=postgresql://admin:changeme@postgres:5432/moderation
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
