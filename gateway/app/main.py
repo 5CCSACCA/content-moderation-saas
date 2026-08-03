@@ -6,6 +6,10 @@ from fastapi.responses import JSONResponse
 
 app = FastAPI(title="Gateway Service", version="0.2.0")
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+Instrumentator().instrument(app).expose(app)
+
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
 SUBMISSION_SERVICE_URL = os.getenv("SUBMISSION_SERVICE_URL", "http://submission-service:8000")
 MODERATION_SERVICE_URL = os.getenv("MODERATION_SERVICE_URL", "http://moderation-service:8000")

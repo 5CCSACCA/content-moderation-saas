@@ -13,6 +13,10 @@ FLAG_THRESHOLD = 0.5
 
 app = FastAPI(title="Inference Service", version="0.1.0")
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+Instrumentator().instrument(app).expose(app)
+
 # Load model and tokenizer once at startup, not per-request
 tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_NAME)
 model = DistilBertForSequenceClassification.from_pretrained(MODEL_NAME)
