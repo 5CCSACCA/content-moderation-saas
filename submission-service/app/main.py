@@ -1,20 +1,25 @@
 import os
 import uuid
 
-import httpx
+from celery import Celery
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
-from .models import Prediction, Submission
+from .models import Submission
 from .schemas import SubmissionCreate, SubmissionResponse
 from .security import CurrentUser, get_current_user
 
-app = FastAPI(title="Submission Service", version="0.1.0")
+app = FastAPI(title="Submission Service", version="0.2.0")
 
 Base.metadata.create_all(bind=engine)
 
-INFERENCE_SERVICE_URL = os.getenv("INFERENCE_SERVICE_URL", "http://inference-service:8000")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+
+# Connects to the same Celery broker as worker, referencing the task by
+# name only — submission-service doesn't need to import worker's code,
+# just needs to know the name of the task and where the broker lives.
+celery_app = Celery("submission-service", broker=REDIS_URL, backend=REDIS_URL)
 
 
 @app.get("/health")
@@ -35,10 +40,11 @@ def create_submission(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Accepts a comment from an authenticated user, sends it to
-    inference-service for scoring, and stores both the submission and
-    its prediction. Any authenticated user can submit — moderation
-    endpoints (separate service) are what's role-gated, not this one."""
+    """Accepts a comment from an authenticated user, saves it immediately,
+    and enqueues an asynchronous scoring job rather than calling
+    inference-service directly. The response returns right away with
+    prediction=null; the client can poll GET /submissions/{id} to see
+    the result once worker has processed the job."""
 
     submission = Submission(
         user_id=uuid.UUID(current_user.user_id),
@@ -48,39 +54,7 @@ def create_submission(
     db.commit()
     db.refresh(submission)
 
-    try:
-        response = httpx.post(
-            f"{INFERENCE_SERVICE_URL}/predict",
-            json={"text": payload.text},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError:
-        # The submission itself is still saved even if scoring fails —
-        # this avoids losing user data due to a transient downstream
-        # issue, and the missing prediction is visible to the caller.
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Submission saved, but inference-service could not be reached",
-        )
-
-    result = response.json()
-    scores = result["scores"]
-
-    prediction = Prediction(
-        submission_id=submission.id,
-        toxic=scores["toxic"],
-        severe_toxic=scores["severe_toxic"],
-        obscene=scores["obscene"],
-        threat=scores["threat"],
-        insult=scores["insult"],
-        identity_hate=scores["identity_hate"],
-        flagged=result["flagged"],
-        raw_scores=scores,
-    )
-    db.add(prediction)
-    db.commit()
-    db.refresh(submission)  # refresh to pick up the new prediction relationship
+    celery_app.send_task("score_submission", args=[str(submission.id)])
 
     return submission
 
@@ -93,7 +67,8 @@ def get_submission(
 ):
     """Users can only view their own submissions — moderators/admins
     use the separate moderation-service to view the flagged queue
-    across all users."""
+    across all users. If prediction is still null, worker hasn't
+    finished scoring it yet — the client should poll again shortly."""
     submission = db.query(Submission).filter(Submission.id == submission_id).first()
 
     if not submission:
