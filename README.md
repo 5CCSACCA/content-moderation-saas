@@ -87,8 +87,8 @@ network in the deployed configuration.
 - Docker and Docker Compose installed
 - 4 CPUs / 16GB RAM minimum
 
-No manual `.env` setup, credential entry, or extra steps are required —
-safe local defaults are provided in `docker-compose.yml` and `.env.example`
+No manual `.env` setup, credential entry, or extra steps are required.
+Safe local defaults are provided in `docker-compose.yml` and `.env.example`
 for coursework evaluation purposes.
 
 ## Deployment
@@ -230,6 +230,39 @@ This project follows GitFlow:
 Automated tests are split into fast, isolated unit/API tests per service
 (using an in-memory SQLite database and mocked external calls) and a live
 integration test that runs against the real, running Docker Compose stack.
+The integration test automatically skips itself if the stack isn't running,
+so it's safe to include in a single full-suite run regardless.
+
+> **Note**: unit tests for `inference-service` depend on `torch` and
+> `transformers`, which require Python 3.11 or 3.12 (Python 3.13 lacks
+> prebuilt wheels for `tokenizers`, a `transformers` dependency, and will
+> fail to install via pip). This does not affect the deployed system,
+> since Docker images use Python 3.11 internally regardless of the host
+> machine's Python version — this only affects running the test suite
+> directly on your local machine.
+>
+> If running tests locally on Python 3.13, switch to Python 3.12 via
+> pyenv:
+> ```bash
+> pyenv install 3.12.4          # skip if already installed
+> pyenv local 3.12.4            # sets Python 3.12.4 for this directory only
+> python -m venv venv
+> source venv/bin/activate
+> pip install -r tests/requirements-test.txt
+> ```
+> Alternatively, install Rust to compile `tokenizers` from source instead
+> of switching Python versions:
+> ```bash
+> curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+> source ~/.cargo/env
+> pip install -r tests/requirements-test.txt
+> ```
+
+**Run the entire test suite in one command:**
+```bash
+pip install -r tests/requirements-test.txt
+pytest tests/ -v
+```
 
 **Unit and API-level tests** (no Docker required):
 ```bash
@@ -265,11 +298,10 @@ python3 load-test/load_test.py
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `JWT_SECRET` | gateway, auth-service, submission-service, moderation-service | Signing/verification key for JWTs |
+| `JWT_SECRET` | auth-service, submission-service, moderation-service | Signing/verification key for JWTs |
 | `DATABASE_URL` | auth-service, submission-service, moderation-service, worker | Postgres connection string |
 | `REDIS_URL` | worker, submission-service | Celery broker connection |
 
 Safe local defaults are set in `docker-compose.yml` / `.env.example` for
 coursework evaluation purposes; no manual secret configuration is required
 to deploy.
-```
