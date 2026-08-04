@@ -70,6 +70,8 @@ def _resolve_target(path: str):
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
 )
 @limiter.limit("60/minute")
+# Temporarily raised to 2000/minute for load testing (see load-test/load_test.py)
+# @limiter.limit("2000/minute") 
 async def proxy(full_path: str, request: Request):
     """Catch-all reverse proxy, rate-limited to 60 requests per minute
     per client IP. Forwards method, headers (including Authorization),
