@@ -28,52 +28,43 @@ routing flagged content to human moderators for review.
 A full architecture discussion, including design decisions and diagrams, is
 in the accompanying report.
 
+## Getting Started
+
+Clone the repository:
+
+```bash
+git clone https://github.com/5CCSACCA/resit-coursework-moboluw4rin.git
+cd resit-coursework-moboluw4rin
+```
+
 ## Project Structure
 
 Each microservice lives in its own folder with an isolated Dockerfile and
 `requirements.txt`, so dependencies don't leak between services:
 
 ```
-gateway/
-  Dockerfile
-  requirements.txt
-  app/
-auth-service/
-  Dockerfile
-  requirements.txt
-  app/
-inference-service/
-  Dockerfile
-  requirements.txt
-  app/
-submission-service/
-  Dockerfile
-  requirements.txt
-  app/
-moderation-service/
-  Dockerfile
-  requirements.txt
-  app/
-worker/
-  Dockerfile
-  requirements.txt
-  app/
+gateway/, auth-service/, inference-service/,
+submission-service/, moderation-service/, worker/
+    Dockerfile
+    requirements.txt
+    app/
+
 model-training/
-  toxicity_distilbert_finetune.ipynb
+    toxicity_distilbert_finetune.ipynb
+
 tests/
-  auth_service/
-  submission_service/
-  inference_service/
-  moderation_service/
-  integration/
+    auth_service/, submission_service/, inference_service/,
+    moderation_service/, integration/
+
 load-test/
-  load_test.py
+    load_test.py
+
 docker-compose.yml
 prometheus/
-  prometheus.yml
+    prometheus.yml
 grafana/
-  provisioning/
-  dashboards/
+    provisioning/
+    dashboards/
 ```
 
 Every FastAPI service exposes interactive API docs at `/docs` (Swagger UI)
