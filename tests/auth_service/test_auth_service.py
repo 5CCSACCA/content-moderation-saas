@@ -67,7 +67,7 @@ def test_register_rejects_duplicate_email(client):
 
 def test_login_fails_with_wrong_password(client):
     client.post(
-        "/register", json={"email": "logintest@example.com", "password": "correctpass"}
+        "/register", json={"email": "logintest@example.com", "password": "correctpass123"}
     )
     response = client.post(
         "/login", json={"email": "logintest@example.com", "password": "wrongpass"}
@@ -77,10 +77,10 @@ def test_login_fails_with_wrong_password(client):
 
 def test_login_succeeds_with_correct_password_and_returns_token(client):
     client.post(
-        "/register", json={"email": "logintest2@example.com", "password": "correctpass"}
+        "/register", json={"email": "logintest2@example.com", "password": "correctpass123"}
     )
     response = client.post(
-        "/login", json={"email": "logintest2@example.com", "password": "correctpass"}
+        "/login", json={"email": "logintest2@example.com", "password": "correctpass123"}
     )
     assert response.status_code == 200
     assert "access_token" in response.json()
