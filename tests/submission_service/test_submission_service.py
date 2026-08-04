@@ -99,3 +99,23 @@ def test_get_nonexistent_submission_returns_404(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 404
+
+
+def test_create_submission_rejects_empty_text(client):
+    token = make_token(role="user")
+    response = client.post(
+        "/submissions",
+        json={"text": ""},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+
+def test_create_submission_rejects_whitespace_only_text(client):
+    token = make_token(role="user")
+    response = client.post(
+        "/submissions",
+        json={"text": "   "},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
