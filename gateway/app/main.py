@@ -3,27 +3,38 @@ import os
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-
-app = FastAPI(title="Gateway Service", version="0.2.0")
-
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
+app = FastAPI(title="Gateway Service", version="0.3.0")
+
+# Rate limiting: identifies clients by IP address and caps requests per
+# minute. This is the only publicly exposed service, so it's the right
+# place to enforce a global rate limit protecting all downstream
+# services from abuse, rather than duplicating this in every service.
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# IMPORTANT: metrics instrumentation must be set up BEFORE the catch-all
+# proxy route below is registered. FastAPI/Starlette match routes in
+# registration order, and the catch-all matches literally any path —
+# including /metrics — so if it were registered first, it would swallow
+# Prometheus's scrape requests and return 404 instead of real metrics.
 Instrumentator().instrument(app).expose(app)
 
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
 SUBMISSION_SERVICE_URL = os.getenv("SUBMISSION_SERVICE_URL", "http://submission-service:8000")
 MODERATION_SERVICE_URL = os.getenv("MODERATION_SERVICE_URL", "http://moderation-service:8000")
 
-# Maps a public path prefix to the internal service that should handle it.
 ROUTES = {
     "/auth": AUTH_SERVICE_URL,
     "/submissions": SUBMISSION_SERVICE_URL,
     "/moderation": MODERATION_SERVICE_URL,
 }
 
-# moderation-service's own routes don't actually start with "/moderation" —
-# they're /queue, /queue/{id}/action, /actions. We strip the "/moderation"
-# prefix before forwarding so the internal service sees its real paths.
 STRIP_PREFIX = {"/auth", "/moderation"}
 
 client = httpx.AsyncClient(timeout=15.0)
@@ -32,7 +43,9 @@ client = httpx.AsyncClient(timeout=15.0)
 @app.get("/health")
 def health():
     """Basic health check endpoint used by Docker Compose healthchecks
-    and Prometheus/monitoring to confirm the service is responding."""
+    and Prometheus/monitoring to confirm the service is responding.
+    Deliberately not rate-limited, since Docker's healthcheck polls
+    this frequently and shouldn't be able to trip the limiter."""
     return {"status": "ok"}
 
 
@@ -42,9 +55,6 @@ def root():
 
 
 def _resolve_target(path: str):
-    """Finds which internal service a given request path should be
-    forwarded to, and computes the path to forward as seen by that
-    internal service (stripping the gateway-level prefix where needed)."""
     for prefix, base_url in ROUTES.items():
         if path == prefix or path.startswith(prefix + "/"):
             if prefix in STRIP_PREFIX:
@@ -59,13 +69,13 @@ def _resolve_target(path: str):
     "/{full_path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
 )
+@limiter.limit("60/minute")
 async def proxy(full_path: str, request: Request):
-    """Catch-all reverse proxy. Forwards the incoming request — method,
-    headers (including Authorization, so JWTs pass through untouched),
-    query params, and body — to whichever internal service owns this
-    path, then returns that service's response as-is. Downstream
-    services perform their own JWT verification and role checks; the
-    gateway's job here is routing, not re-implementing auth logic."""
+    """Catch-all reverse proxy, rate-limited to 60 requests per minute
+    per client IP. Forwards method, headers (including Authorization),
+    query params, and body to whichever internal service owns this
+    path. Downstream services still perform their own JWT verification
+    and role checks; this is an additional layer, not a replacement."""
     path = "/" + full_path
     base_url, forwarded_path = _resolve_target(path)
 
@@ -77,8 +87,6 @@ async def proxy(full_path: str, request: Request):
 
     target_url = f"{base_url}{forwarded_path}"
 
-    # Forward all headers except 'host', which must reflect the target,
-    # not the original request made to the gateway.
     forward_headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
 
     body = await request.body()
