@@ -7,7 +7,7 @@ TestClient against an in-memory SQLite database for speed and isolation from Pos
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "auth-service", "app"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..","..", "auth-service", "app"))
 
 import pytest
 
