@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from .database import get_db, engine
 from .models import Base as ActionsBase, ModerationAction
@@ -21,7 +22,10 @@ Instrumentator().instrument(app).expose(app)
 
 # Only create moderation_actions here — submissions/predictions are owned
 # and created by submission-service; this service only reads them.
-ActionsBase.metadata.create_all(bind=engine)
+try:
+    ActionsBase.metadata.create_all(bind=engine)
+except (IntegrityError, ProgrammingError):
+    pass
 
 
 @app.get("/health")

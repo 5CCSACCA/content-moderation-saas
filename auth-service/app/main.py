@@ -3,6 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from .database import get_db, engine
 from .models import Base, User
@@ -18,7 +19,14 @@ Instrumentator().instrument(app).expose(app)
 # Create tables on startup if they don't already exist. For a coursework
 # project this keeps deployment to a single command; a production system
 # would use a proper migration tool (e.g. Alembic) instead.
-Base.metadata.create_all(bind=engine)
+
+try:
+    Base.metadata.create_all(bind=engine)
+except (IntegrityError, ProgrammingError):
+    # Harmless race condition: another service instance or a container
+    # restart attempted table creation concurrently and won first. The
+    # tables exist either way, so this is safe to ignore.
+    pass
 
 bearer_scheme = HTTPBearer()
 

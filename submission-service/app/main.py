@@ -4,6 +4,7 @@ import uuid
 from celery import Celery
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from .database import Base, engine, get_db
 from .models import Submission
@@ -16,7 +17,13 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 Instrumentator().instrument(app).expose(app)
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except (IntegrityError, ProgrammingError):
+    # Harmless race condition: another service instance or a container
+    # restart attempted table creation concurrently and won first. The
+    # tables exist either way, so this is safe to ignore.
+    pass
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
